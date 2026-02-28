@@ -5,6 +5,8 @@ import json
 import os
 import base64
 import uuid
+import random
+import requests as http_requests
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
@@ -39,6 +41,15 @@ def init_db():
             start_date TEXT NOT NULL,
             end_date TEXT NOT NULL,
             total_price REAL NOT NULL
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS otps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone TEXT NOT NULL,
+            otp_code TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            verified INTEGER DEFAULT 0
         )
     ''')
     conn.commit()
@@ -246,21 +257,127 @@ def manage_vehicle(vehicle_id):
         return jsonify({'error': 'Vehicle not found'}), 404
 
 
+# ─── OTP helpers ──────────────────────────────────────────────────────────────
+def send_sms_fast2sms(phone, message):
+    """Send SMS via Fast2SMS. Falls back to console log if no API key."""
+    api_key = os.environ.get('FAST2SMS_API_KEY', '')
+    if not api_key:
+        print(f"[OTP LOG] Phone: {phone} | Message: {message}")
+        return True
+    try:
+        resp = http_requests.post(
+            'https://www.fast2sms.com/dev/bulkV2',
+            headers={'authorization': api_key},
+            json={
+                'route': 'q',          # quick transactional
+                'message': message,
+                'language': 'english',
+                'flash': 0,
+                'numbers': phone
+            },
+            timeout=10
+        )
+        result = resp.json()
+        if not result.get('return'):
+            print(f"[Fast2SMS Error] {result}")
+        return result.get('return', False)
+    except Exception as e:
+        print(f"[SMS Exception] {e}")
+        return False
+
+# ─── OTP endpoints ─────────────────────────────────────────────────────────────
+@app.route('/api/otp/send', methods=['POST'])
+def send_otp():
+    data = request.json or {}
+    phone = str(data.get('phone', '')).strip()
+
+    if not phone or len(phone) < 10:
+        return jsonify({'error': 'Please provide a valid phone number'}), 400
+
+    otp = str(random.randint(100000, 999999))
+    expires_at = (datetime.datetime.utcnow() + datetime.timedelta(minutes=10)).isoformat()
+
+    conn = get_db_connection()
+    # Invalidate any previous OTPs for this number
+    conn.execute('DELETE FROM otps WHERE phone = ?', (phone,))
+    conn.execute(
+        'INSERT INTO otps (phone, otp_code, expires_at, verified) VALUES (?, ?, ?, 0)',
+        (phone, otp, expires_at)
+    )
+    conn.commit()
+    conn.close()
+
+    message = f"Your ZK Travels verification code is {otp}. Valid for 10 minutes. Do not share this with anyone."
+    send_sms_fast2sms(phone, message)
+
+    return jsonify({'message': f'OTP sent to {phone}'}), 200
+
+
+@app.route('/api/otp/verify', methods=['POST'])
+def verify_otp():
+    data = request.json or {}
+    phone = str(data.get('phone', '')).strip()
+    otp_input = str(data.get('otp', '')).strip()
+
+    conn = get_db_connection()
+    row = conn.execute(
+        'SELECT * FROM otps WHERE phone = ? ORDER BY id DESC LIMIT 1', (phone,)
+    ).fetchone()
+
+    if not row:
+        conn.close()
+        return jsonify({'error': 'No OTP found. Please request a new one.'}), 404
+
+    now = datetime.datetime.utcnow()
+    expires_at = datetime.datetime.fromisoformat(row['expires_at'])
+
+    if now > expires_at:
+        conn.execute('DELETE FROM otps WHERE phone = ?', (phone,))
+        conn.commit()
+        conn.close()
+        return jsonify({'error': 'OTP has expired. Please request a new one.'}), 410
+
+    if row['otp_code'] != otp_input:
+        conn.close()
+        return jsonify({'error': 'Incorrect OTP. Please try again.'}), 401
+
+    # Mark as verified
+    conn.execute('UPDATE otps SET verified = 1 WHERE phone = ?', (phone,))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Phone verified successfully', 'verified': True})
+
+
+# ─── Bookings ──────────────────────────────────────────────────────────────────
 @app.route('/api/bookings', methods=['GET', 'POST'])
 def handle_bookings():
     if request.method == 'POST':
         data = request.json
+        phone = str(data.get('phone', '')).strip()
+
+        # Require phone to be OTP-verified
         conn = get_db_connection()
+        otp_row = conn.execute(
+            'SELECT * FROM otps WHERE phone = ? AND verified = 1 ORDER BY id DESC LIMIT 1',
+            (phone,)
+        ).fetchone()
+
+        if not otp_row:
+            conn.close()
+            return jsonify({'error': 'Phone number not verified. Please verify via OTP first.'}), 403
+
         cursor = conn.cursor()
         cursor.execute(
             'INSERT INTO bookings (name, email, phone, vehicle_id, start_date, end_date, total_price) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            (data['name'], data['email'], data['phone'], data['vehicle_id'], data['start_date'], data['end_date'], data['total_price'])
+            (data['name'], data['email'], phone, data['vehicle_id'], data['start_date'], data['end_date'], data['total_price'])
         )
+        # Clean up: remove the used OTP
+        conn.execute('DELETE FROM otps WHERE phone = ?', (phone,))
         conn.commit()
         booking_id = cursor.lastrowid
         conn.close()
-        return jsonify({'id': booking_id, 'message': 'Booking successful'}), 201
-    
+        return jsonify({'id': booking_id, 'message': 'Booking confirmed!'}), 201
+
     else:
         conn = get_db_connection()
         bookings = conn.execute('SELECT * FROM bookings ORDER BY id DESC').fetchall()
