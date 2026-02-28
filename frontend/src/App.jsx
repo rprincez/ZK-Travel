@@ -5,6 +5,7 @@ import Hero from './components/Hero'
 import FleetGallery from './components/FleetGallery'
 import AdminDashboard from './components/AdminDashboard'
 import AdminLogin from './components/AdminLogin'
+import ChangePassword from './components/ChangePassword'
 
 function Home() {
   return (
@@ -28,14 +29,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/admin/login" element={<AdminLogin />} />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute>
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

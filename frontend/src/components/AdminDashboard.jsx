@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import axios from 'axios'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Car, Calendar, Plus, Trash2, Upload, Image, LogOut } from 'lucide-react'
+import { ArrowLeft, Car, Calendar, Plus, Trash2, Upload, Image, LogOut, KeyRound } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 
 function ImageUploader({ currentImage, onImageChange }) {
@@ -166,9 +166,14 @@ export default function AdminDashboard() {
                             <Calendar className="w-5 h-5" /> All Bookings
                         </button>
                     </nav>
-                    <button onClick={handleLogout} className="flex items-center gap-2 text-gray-400 hover:text-red-400 transition-colors text-sm mt-4">
-                        <LogOut className="w-4 h-4" /> Sign Out
-                    </button>
+                    <div className="space-y-2 mt-4">
+                        <Link to="/admin/change-password" className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm w-full px-2 py-1.5 rounded-lg hover:bg-gray-800">
+                            <KeyRound className="w-4 h-4" /> Change Password
+                        </Link>
+                        <button onClick={handleLogout} className="flex items-center gap-2 text-gray-400 hover:text-red-400 transition-colors text-sm w-full px-2 py-1.5">
+                            <LogOut className="w-4 h-4" /> Sign Out
+                        </button>
+                    </div>
                 </div>
             </aside>
 

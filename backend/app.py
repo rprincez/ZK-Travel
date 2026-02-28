@@ -6,9 +6,14 @@ import os
 import base64
 import uuid
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
+import jwt
+import datetime
+import functools
 
 app = Flask(__name__)
-CORS(app)  # Allow all origins for simplicity
+app.config['SECRET_KEY'] = os.environ.get('JWT_SECRET', 'zktravels-super-secret-key-change-in-prod')
+CORS(app, origins='*')
 
 DB_PATH = 'data/bookings.db'
 VEHICLES_PATH = 'data/vehicles.json'
@@ -75,6 +80,96 @@ def init_vehicles():
 init_db()
 init_vehicles()
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# ─── Admin credential storage ─────────────────────────────────────────────────
+ADMIN_CREDS_PATH = 'data/admin_creds.json'
+
+def init_admin_creds():
+    """Create default admin credentials if they don't exist yet."""
+    if not os.path.exists(ADMIN_CREDS_PATH):
+        creds = {
+            'username': 'admin',
+            # default password: admin123  (hashed)
+            'password_hash': generate_password_hash('admin123')
+        }
+        with open(ADMIN_CREDS_PATH, 'w') as f:
+            json.dump(creds, f)
+
+def get_admin_creds():
+    with open(ADMIN_CREDS_PATH, 'r') as f:
+        return json.load(f)
+
+init_admin_creds()
+
+# ─── JWT helper ───────────────────────────────────────────────────────────────
+def token_required(f):
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Missing or invalid token'}), 401
+        token = auth_header.split(' ', 1)[1]
+        try:
+            jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        except jwt.ExpiredSignatureError:
+            return jsonify({'error': 'Token expired, please log in again'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'error': 'Invalid token'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+# ─── Auth endpoints ───────────────────────────────────────────────────────────
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    data = request.json or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+
+    creds = get_admin_creds()
+    if username != creds['username'] or not check_password_hash(creds['password_hash'], password):
+        return jsonify({'error': 'Invalid username or password'}), 401
+
+    token = jwt.encode(
+        {
+            'sub': username,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=8)
+        },
+        app.config['SECRET_KEY'],
+        algorithm='HS256'
+    )
+    return jsonify({'token': token, 'username': username})
+
+@app.route('/api/auth/verify', methods=['GET'])
+def verify_token():
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return jsonify({'valid': False}), 401
+    token = auth_header.split(' ', 1)[1]
+    try:
+        payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        return jsonify({'valid': True, 'username': payload.get('sub')})
+    except jwt.PyJWTError:
+        return jsonify({'valid': False}), 401
+
+@app.route('/api/auth/change-password', methods=['POST'])
+@token_required
+def change_password():
+    data = request.json or {}
+    new_password = data.get('new_password', '')
+    new_username = data.get('new_username', '')
+
+    if len(new_password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+
+    creds = get_admin_creds()
+    if new_username:
+        creds['username'] = new_username.strip()
+    creds['password_hash'] = generate_password_hash(new_password)
+
+    with open(ADMIN_CREDS_PATH, 'w') as f:
+        json.dump(creds, f)
+    return jsonify({'message': 'Credentials updated successfully'})
+
 
 @app.route('/api/upload', methods=['POST'])
 def upload_image():
