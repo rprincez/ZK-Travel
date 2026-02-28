@@ -1,14 +1,24 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import sqlite3
 import json
 import os
+import base64
+import uuid
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 CORS(app)  # Allow all origins for simplicity
 
 DB_PATH = 'data/bookings.db'
 VEHICLES_PATH = 'data/vehicles.json'
+UPLOAD_FOLDER = 'data/uploads'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'gif'}
+
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def init_db():
     os.makedirs('data', exist_ok=True)
@@ -64,6 +74,25 @@ def init_vehicles():
 # Run initialization
 init_db()
 init_vehicles()
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+@app.route('/api/upload', methods=['POST'])
+def upload_image():
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image provided'}), 400
+    
+    file = request.files['image']
+    if file.filename == '' or not allowed_file(file.filename):
+        return jsonify({'error': 'Invalid file type. Use PNG, JPG, WEBP, or GIF.'}), 400
+    
+    # Read and encode to base64 data URI so it works without persistent storage
+    ext = file.filename.rsplit('.', 1)[1].lower()
+    image_data = file.read()
+    b64 = base64.b64encode(image_data).decode('utf-8')
+    data_uri = f'data:image/{ext};base64,{b64}'
+    
+    return jsonify({'url': data_uri}), 201
+
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
