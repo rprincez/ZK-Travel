@@ -1,9 +1,10 @@
-import React from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { AuthProvider, ProtectedRoute } from './AuthContext'
 import Navbar from './components/Navbar'
 import Hero from './components/Hero'
 import FleetGallery from './components/FleetGallery'
 import AdminDashboard from './components/AdminDashboard'
+import AdminLogin from './components/AdminLogin'
 
 function Home() {
   return (
@@ -22,11 +23,21 @@ function Home() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/admin" element={<AdminDashboard />} />
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   )
 }
