@@ -271,6 +271,7 @@ export default function AdminDashboard() {
 /* Sub-component: single vehicle card with inline image change */
 function VehicleCard({ vehicle, apiUrl, onDelete, onImageChange }) {
     const [uploading, setUploading] = useState(false)
+    const [imgHovered, setImgHovered] = useState(false)
     const fileRef = useRef()
 
     const handleFile = async (file) => {
@@ -298,9 +299,14 @@ function VehicleCard({ vehicle, apiUrl, onDelete, onImageChange }) {
                     className="relative w-24 h-20 rounded-lg overflow-hidden cursor-pointer flex-shrink-0"
                     onClick={() => fileRef.current.click()}
                     title="Click to change image"
+                    onMouseEnter={() => setImgHovered(true)}
+                    onMouseLeave={() => setImgHovered(false)}
                 >
                     <img src={vehicle.image} alt={vehicle.name} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity">
+                    <div
+                        className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center transition-opacity duration-200"
+                        style={{ opacity: imgHovered || uploading ? 1 : 0 }}
+                    >
                         {uploading
                             ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
                             : <><Upload className="w-4 h-4 text-white" /><span className="text-white text-[10px] mt-1">Change</span></>
