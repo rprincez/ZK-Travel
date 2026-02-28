@@ -29,6 +29,42 @@ def init_db():
     conn.commit()
     conn.close()
 
+def init_vehicles():
+    if not os.path.exists(VEHICLES_PATH):
+        dummy_vehicles = [
+            {
+                "id": "1",
+                "name": "Toyota Innova Crysta",
+                "type": "SUV",
+                "price": 2500,
+                "image": "https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&q=80&w=800",
+                "seats": 7
+            },
+            {
+                "id": "2",
+                "name": "Hyundai Verna",
+                "type": "Sedan",
+                "price": 1800,
+                "image": "https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&q=80&w=800",
+                "seats": 5
+            },
+            {
+                "id": "3",
+                "name": "Mahindra Thar",
+                "type": "Off-Road",
+                "price": 3000,
+                "image": "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&q=80&w=800",
+                "seats": 4
+            }
+        ]
+        os.makedirs('data', exist_ok=True)
+        with open(VEHICLES_PATH, 'w') as f:
+            json.dump(dummy_vehicles, f, indent=4)
+
+# Run initialization
+init_db()
+init_vehicles()
+
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -108,37 +144,4 @@ def handle_bookings():
         return jsonify([dict(row) for row in bookings])
 
 if __name__ == '__main__':
-    init_db()
-    # Create dummy vehicles if it doesn't exist
-    if not os.path.exists(VEHICLES_PATH):
-        dummy_vehicles = [
-            {
-                "id": "1",
-                "name": "Toyota Innova Crysta",
-                "type": "SUV",
-                "price": 2500,
-                "image": "https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&q=80&w=800",
-                "seats": 7
-            },
-            {
-                "id": "2",
-                "name": "Hyundai Verna",
-                "type": "Sedan",
-                "price": 1800,
-                "image": "https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&q=80&w=800",
-                "seats": 5
-            },
-            {
-                "id": "3",
-                "name": "Mahindra Thar",
-                "type": "Off-Road",
-                "price": 3000,
-                "image": "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&q=80&w=800",
-                "seats": 4
-            }
-        ]
-        os.makedirs('data', exist_ok=True)
-        with open(VEHICLES_PATH, 'w') as f:
-            json.dump(dummy_vehicles, f, indent=4)
-
     app.run(debug=True, port=5000)
